@@ -72,3 +72,188 @@ SELECT d.DIRECTOR_NAME, AVG(m.MOVIE_DURATION) FROM DIRECTORS d INNER JOIN MOVIES
 SELECT m.MOVIE_DURATION, m.MOVIE_NAME FROM MOVIES m INNER JOIN USER_MOVIE_ACCESS u ON m.MOVIE_ID = u.MOVIE_ID WHERE u.ACCESS_DATE BETWEEN '2017-01-25' AND '2019-01-25';
 
 -- 25- Indica el número de películas que hayan hecho los directores durante las décadas de los 60, 70 y 80 que contengan la palabra “The” en cualquier par
+
+SELECT m.movie_name, n.nationality_name, d.director_name FROM movies AS m JOIN nationalities AS n ON m.nationality_id = n.nationality_id JOIN directors AS d ON m.director_id = d.director_id;
+
+-- 27- Muestra las películas con los actores que han participado en cada una de ellas
+SELECT m.movie_name, a.actor_name FROM movies AS m JOIN movies_actors AS ma ON m.movie_id = ma.movie_id JOIN actors AS a ON ma.actor_id = a.actor_id;
+
+-- 28- Indica cual es el nombre del director del que más películas se ha accedido
+SELECT d.director_name FROM directors AS d JOIN movies AS m ON d.director_id = m.director_id JOIN user_movie_access AS uma ON m.movie_id = uma.movie_id GROUP BY d.director_name ORDER BY COUNT(uma.access_id) DESC FETCH FIRST 1 ROWS ONLY;
+
+-- 29- Indica cuantos premios han ganado cada uno de los estudios con las películas que han creado
+SELECT s.STUDIO_NAME, SUM(a.AWARD_WIN) AS TOTAL_PREMIOS_GANADOS FROM STUDIOS s JOIN MOVIES m ON s.STUDIO_ID = m.STUDIO_ID JOIN MOVIE_AWARDS ma ON m.MOVIE_ID = ma.MOVIE_ID JOIN AWARDS a ON ma.AWARD_ID = a.AWARD_ID GROUP BY s.STUDIO_NAME ORDER BY TOTAL_PREMIOS_GANADOS DESC;
+
+30- Indica el número de premios a los que estuvo nominado un actor, pero que no ha conseguido (Si una película está nominada a un premio, su actor también lo está)
+SELECT
+	a2.ACTOR_NAME AS ACTOR,
+	m.MOVIE_NAME AS MOVIE,
+	SUM(a.AWARD_ALMOST_WIN) AS NOT_WON_NOMINATION
+FROM
+	AWARDS a
+INNER JOIN
+	MOVIES m
+	ON
+		a.MOVIE_ID = m.MOVIE_ID
+INNER JOIN
+	MOVIES_ACTORS ma
+	ON
+		m.MOVIE_ID = ma.MOVIE_ID
+INNER JOIN
+	ACTORS a2
+	ON
+		ma.ACTOR_ID = a2.ACTOR_ID
+GROUP BY
+	ACTOR,
+	MOVIE
+ORDER BY
+	ACTOR,
+	NOT_WON_NOMINATION;
+ 
+SELECT
+	a2.ACTOR_NAME AS ACTOR,
+	SUM(a.AWARD_ALMOST_WIN) AS NOT_WON_NOMINATION
+FROM
+	AWARDS a
+INNER JOIN
+	MOVIES m
+	ON
+		a.MOVIE_ID = m.MOVIE_ID
+INNER JOIN
+	MOVIES_ACTORS ma
+	ON
+		m.MOVIE_ID = ma.MOVIE_ID
+INNER JOIN
+	ACTORS a2
+	ON
+		ma.ACTOR_ID = a2.ACTOR_ID
+GROUP BY
+	ACTOR
+ORDER BY
+	NOT_WON_NOMINATION;
+
+31- Indica cuantos actores y directores hicieron películas para los estudios no activos
+SELECT COUNT(DISTINCT M.DIRECTOR_ID) AS DIRECTOR_NUMBER,
+       COUNT(DISTINCT MA.ACTOR_ID) AS ACTOR_NUMBER
+FROM STUDIOS S
+INNER JOIN MOVIES M ON M.STUDIO_ID = S.STUDIO_ID
+INNER JOIN MOVIES_ACTORS MA ON MA.MOVIE_ID = M.MOVIE_ID
+WHERE S.STUDIO_ACTIVE = FALSE
+
+32- Indica el nombre, ciudad, y teléfono de todos los miembros de la plataforma que hayan accedido películas que hayan sido nominadas a más de 150 premios y ganaran menos de 50
+SELECT u.USER_NAME AS NOMBRE, u.USER_TOWN AS CIUDAD, u.USER_PHONE AS TELEFONO FROM USERS u JOIN USER_MOVIE_ACCESS uma ON u.USER_ID = uma.USER_ID JOIN MOVIES m ON uma.MOVIE_ID = m.MOVIE_ID JOIN AWARDS a ON m.MOVIE_ID = a.MOVIE_ID WHERE a.AWARD_NOMINATION > 150 AND a.AWARD_WIN < 50 GROUP BY u.USER_NAME, u.USER_TOWN, u.USER_PHONE ORDER BY u.USER_NAME; 
+
+33- Comprueba si hay errores en la BD entre las películas y directores (un director muerto en el 76 no puede dirigir una película en el 88)
+SELECT d.DIRECTOR_NAME 
+FROM MOVIES m 
+INNER JOIN DIRECTORS d ON m.DIRECTOR_ID = d.DIRECTOR_ID 
+WHERE m.DIRECTOR_ID IN (
+    SELECT m.DIRECTOR_ID 
+    FROM MOVIES m 
+    WHERE m.SENSIBLE = 1 
+    GROUP BY m.DIRECTOR_ID 
+    HAVING COUNT(*) >= 5
+) 
+AND m.DIRECTOR_ID IN (
+    SELECT m.DIRECTOR_ID 
+    FROM MOVIES m 
+    INNER JOIN AWARDS a ON m.MOVIE_ID = a.MOVIE_ID 
+    GROUP BY m.DIRECTOR_ID 
+    HAVING SUM(a.AWARD_MIN) < 50
+);
+
+
+35- Indica cuál es el género favorito de cada uno de los directores cuando dirigen una película
+
+WITH GENRE_COUNTS AS
+  (SELECT D.DIRECTOR_ID,
+          D.DIRECTOR_NAME,
+          G.GENRE_ID,
+          G.GENRE_NAME,
+          COUNT(*) AS NUM_MOVIES
+   FROM MOVIES M
+   INNER JOIN GENRES G ON M.GENRE_ID = G.GENRE_ID
+   INNER JOIN DIRECTORS D ON M.DIRECTOR_ID = D.DIRECTOR_ID
+   GROUP BY D.DIRECTOR_ID,
+            D.DIRECTOR_NAME,
+            G.GENRE_ID,
+            G.GENRE_NAME),
+     MAX_GENRE AS
+  (SELECT DIRECTOR_ID,
+          MAX(NUM_MOVIES) AS MAX_MOVIES
+   FROM GENRE_COUNTS
+   GROUP BY DIRECTOR_ID)
+SELECT GC.DIRECTOR_NAME,
+       GROUP_CONCAT(GC.GENRE_NAME) AS GENRE_NAME
+FROM GENRE_COUNTS GC
+INNER JOIN MAX_GENRE MG ON GC.DIRECTOR_ID = MG.DIRECTOR_ID
+AND GC.NUM_MOVIES = MG.MAX_MOVIES
+GROUP BY GC.DIRECTOR_NAME;
+
+36- Indica cuál es la nacionalidad favorita de cada uno de los estudios en la producción de las películas
+SELECT STUDIO_NAME,
+       GROUP_CONCAT(NATIONALITY_NAME) AS NATIONALITY_NAME
+FROM
+  (SELECT COUNT(N.NATIONALITY_ID) AS NUM_MOVIES,
+          S.STUDIO_NAME,
+          N.NATIONALITY_NAME,
+          S.STUDIO_ID,
+          N.NATIONALITY_ID
+   FROM MOVIES M
+   INNER JOIN NATIONALITIES N ON N.NATIONALITY_ID = M.NATIONALITY_ID
+   INNER JOIN STUDIOS S ON S.STUDIO_ID = M.STUDIO_ID
+   GROUP BY S.STUDIO_ID,
+            N.NATIONALITY_ID
+   ORDER BY S.STUDIO_ID ASC,
+            NUM_MOVIES DESC) TOT
+INNER JOIN
+  (SELECT STUDIO_ID,
+          MAX (NUM_MOVIES) AS NUM_MOVIES
+   FROM
+     (SELECT COUNT(N.NATIONALITY_ID) AS NUM_MOVIES,
+             S.STUDIO_NAME,
+             N.NATIONALITY_NAME,
+             S.STUDIO_ID,
+             N.NATIONALITY_ID
+      FROM MOVIES M
+      INNER JOIN NATIONALITIES N ON N.NATIONALITY_ID = M.NATIONALITY_ID
+      INNER JOIN STUDIOS S ON S.STUDIO_ID = M.STUDIO_ID
+      GROUP BY S.STUDIO_ID,
+               N.NATIONALITY_ID
+      ORDER BY S.STUDIO_ID ASC,
+               NUM_MOVIES DESC)
+   GROUP BY STUDIO_ID) MAX ON TOT.STUDIO_ID = MAX.STUDIO_ID
+AND TOT.NUM_MOVIES = MAX.NUM_MOVIES
+GROUP BY STUDIO_NAME
+
+37- Indica cuál fue la primera película a la que accedieron los miembros de la plataforma cuyos teléfonos tengan como último dígito el ID de alguna nacionalidad
+WITH PHONE_DIGIT AS
+  (SELECT USER_NAME,
+          USER_ID,
+          SUBSTR(USER_PHONE, LENGTH(USER_PHONE), 1) AS LAST_NUMBER
+   FROM USERS),
+     USER_NAT AS
+  (SELECT N.NATIONALITY_ID,
+          M.USER_NAME,
+          M.USER_ID
+   FROM NATIONALITIES N
+   INNER JOIN PHONE_DIGIT M ON N.NATIONALITY_ID = M.LAST_NUMBER),
+     MOVIE_ACCESS AS
+  (SELECT UN.NATIONALITY_ID,
+          UN.USER_NAME,
+          UMA.USER_ID,
+          UMA.MOVIE_ID,
+          UMA.ACCESS_DATE
+   FROM USER_NAT UN
+   INNER JOIN USER_MOVIE_ACCESS UMA ON UN.USER_ID = UMA.USER_ID),
+     MIN_ACCESS AS
+  (SELECT USER_ID,
+          MIN(ACCESS_DATE) AS ACCESS_DATE
+   FROM MOVIE_ACCESS
+   GROUP BY USER_ID)
+SELECT MOA.USER_NAME,
+       M.MOVIE_NAME
+FROM MOVIE_ACCESS MOA
+INNER JOIN MIN_ACCESS MIA ON MOA.ACCESS_DATE = MIA.ACCESS_DATE
+AND MOA.USER_ID = MIA.USER_ID
+INNER JOIN MOVIES M ON MOA.MOVIE_ID = M.MOVIE_ID
